@@ -45,6 +45,26 @@ func TestPromptSegment_NoContext(t *testing.T) {
 	}
 }
 
+func TestPromptSegment_NoPrompt(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_CONTEXT", "prod")
+	t.Setenv("YAKS_NAMESPACE", "default")
+	t.Setenv("YAKS_NO_PROMPT", "1")
+
+	if got := PromptSegment(); got != "" {
+		t.Errorf("PromptSegment() = %q, want empty when YAKS_NO_PROMPT=1", got)
+	}
+	if got := PromptSegmentColored(); got != "" {
+		t.Errorf("PromptSegmentColored() = %q, want empty when YAKS_NO_PROMPT=1", got)
+	}
+	if got := ZshPrompt(); got != "" {
+		t.Errorf("ZshPrompt() = %q, want empty when YAKS_NO_PROMPT=1", got)
+	}
+	if got := BashPrompt(); got != "" {
+		t.Errorf("BashPrompt() = %q, want empty when YAKS_NO_PROMPT=1", got)
+	}
+}
+
 func TestPromptSegmentColored_Inactive(t *testing.T) {
 	t.Setenv("YAKS_ACTIVE", "")
 	if got := PromptSegmentColored(); got != "" {

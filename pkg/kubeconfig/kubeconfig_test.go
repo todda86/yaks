@@ -336,6 +336,7 @@ func TestLoadAll(t *testing.T) {
 }
 
 func TestDefaultKubeconfigPath_EnvVar(t *testing.T) {
+	t.Setenv("YAKS_KUBECONFIG", "")
 	t.Setenv("KUBECONFIG", "/custom/path/config")
 	path := DefaultKubeconfigPath()
 	if path != "/custom/path/config" {
@@ -348,6 +349,7 @@ func TestDefaultKubeconfigPath_MultipleEnvVar(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		sep = ";"
 	}
+	t.Setenv("YAKS_KUBECONFIG", "")
 	t.Setenv("KUBECONFIG", "/first/config"+sep+"/second/config")
 	path := DefaultKubeconfigPath()
 	if path != "/first/config" {
@@ -356,6 +358,7 @@ func TestDefaultKubeconfigPath_MultipleEnvVar(t *testing.T) {
 }
 
 func TestDefaultKubeconfigPath_NoEnvVar(t *testing.T) {
+	t.Setenv("YAKS_KUBECONFIG", "")
 	t.Setenv("KUBECONFIG", "")
 	path := DefaultKubeconfigPath()
 	home, _ := os.UserHomeDir()
@@ -365,11 +368,21 @@ func TestDefaultKubeconfigPath_NoEnvVar(t *testing.T) {
 	}
 }
 
+func TestDefaultKubeconfigPath_YaksKubeconfigPreferred(t *testing.T) {
+	t.Setenv("KUBECONFIG", "/tmp/yaks-12345/config")
+	t.Setenv("YAKS_KUBECONFIG", "/original/config")
+	path := DefaultKubeconfigPath()
+	if path != "/original/config" {
+		t.Errorf("DefaultKubeconfigPath() = %q, want /original/config", path)
+	}
+}
+
 func TestAllKubeconfigPaths(t *testing.T) {
 	sep := ":"
 	if runtime.GOOS == "windows" {
 		sep = ";"
 	}
+	t.Setenv("YAKS_KUBECONFIG", "")
 	t.Setenv("KUBECONFIG", "/a/config"+sep+"/b/config"+sep+"  "+sep+"/c/config")
 	paths := AllKubeconfigPaths()
 	if len(paths) != 3 {
@@ -381,10 +394,27 @@ func TestAllKubeconfigPaths(t *testing.T) {
 }
 
 func TestAllKubeconfigPaths_NoEnvVar(t *testing.T) {
+	t.Setenv("YAKS_KUBECONFIG", "")
 	t.Setenv("KUBECONFIG", "")
 	paths := AllKubeconfigPaths()
 	if len(paths) != 1 {
 		t.Fatalf("len(paths) = %d, want 1", len(paths))
+	}
+}
+
+func TestAllKubeconfigPaths_YaksKubeconfigPreferred(t *testing.T) {
+	sep := ":"
+	if runtime.GOOS == "windows" {
+		sep = ";"
+	}
+	t.Setenv("KUBECONFIG", "/tmp/yaks-12345/config")
+	t.Setenv("YAKS_KUBECONFIG", "/original/a"+sep+"/original/b")
+	paths := AllKubeconfigPaths()
+	if len(paths) != 2 {
+		t.Fatalf("len(paths) = %d, want 2", len(paths))
+	}
+	if paths[0] != "/original/a" || paths[1] != "/original/b" {
+		t.Errorf("paths = %v, want [/original/a /original/b]", paths)
 	}
 }
 

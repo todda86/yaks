@@ -126,6 +126,7 @@ func TestBuildEnv(t *testing.T) {
 	t.Setenv("YAKS_NAMESPACE", "")
 	t.Setenv("YAKS_DEPTH", "")
 	t.Setenv("YAKS_ACTIVE", "")
+	t.Setenv("YAKS_KUBECONFIG", "")
 
 	env := buildEnv("/tmp/kc", "my-ctx", "my-ns", 2)
 
@@ -138,7 +139,7 @@ func TestBuildEnv(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"KUBECONFIG":        "/tmp/kc",
+		"KUBECONFIG":     "/tmp/kc",
 		"YAKS_CONTEXT":   "my-ctx",
 		"YAKS_NAMESPACE": "my-ns",
 		"YAKS_DEPTH":     "2",
@@ -152,6 +153,11 @@ func TestBuildEnv(t *testing.T) {
 			t.Errorf("%s = %q, want %q", key, got, want)
 		}
 	}
+
+	// YAKS_KUBECONFIG should be set (to default path since KUBECONFIG was empty)
+	if _, ok := envMap["YAKS_KUBECONFIG"]; !ok {
+		t.Error("missing env var YAKS_KUBECONFIG")
+	}
 }
 
 func TestBuildEnv_FiltersExisting(t *testing.T) {
@@ -161,6 +167,7 @@ func TestBuildEnv_FiltersExisting(t *testing.T) {
 	t.Setenv("YAKS_NAMESPACE", "old-ns")
 	t.Setenv("YAKS_DEPTH", "99")
 	t.Setenv("YAKS_ACTIVE", "0")
+	t.Setenv("YAKS_KUBECONFIG", "/original/config")
 
 	env := buildEnv("/new/config", "new-ctx", "new-ns", 1)
 
@@ -180,6 +187,10 @@ func TestBuildEnv_FiltersExisting(t *testing.T) {
 	}
 	if envMap["YAKS_DEPTH"] != "1" {
 		t.Errorf("YAKS_DEPTH = %q, want 1", envMap["YAKS_DEPTH"])
+	}
+	// YAKS_KUBECONFIG should carry forward the original, not get replaced
+	if envMap["YAKS_KUBECONFIG"] != "/original/config" {
+		t.Errorf("YAKS_KUBECONFIG = %q, want /original/config", envMap["YAKS_KUBECONFIG"])
 	}
 
 	// Ensure no duplicate keys
@@ -331,6 +342,90 @@ func TestSetupIsolatedEnv_InvalidContext(t *testing.T) {
 	_, _, _, _, err := setupIsolatedEnv("nonexistent-ctx", "default")
 	if err == nil {
 		t.Fatal("setupIsolatedEnv() expected error for nonexistent context, got nil")
+	}
+}
+
+func TestSetupIsolatedEnv_NestedShell(t *testing.T) {
+	// Write a kubeconfig with two contexts
+	dir := t.TempDir()
+	fullPath := filepath.Join(dir, "config")
+	content := `apiVersion: v1
+kind: Config
+current-context: ctx-a
+clusters:
+- name: cluster-a
+  cluster:
+    server: https://a:6443
+- name: cluster-b
+  cluster:
+    server: https://b:6443
+contexts:
+- name: ctx-a
+  context:
+    cluster: cluster-a
+    user: user-a
+    namespace: default
+- name: ctx-b
+  context:
+    cluster: cluster-b
+    user: user-b
+    namespace: default
+users:
+- name: user-a
+  user:
+    token: token-a
+- name: user-b
+  user:
+    token: token-b
+`
+	if err := os.WriteFile(fullPath, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write test kubeconfig: %v", err)
+	}
+
+	// Simulate being inside a yaks shell: KUBECONFIG points to a temp file
+	// with only ctx-a, but YAKS_KUBECONFIG has the original full config.
+	tmpDir1 := t.TempDir()
+	tmpKC := filepath.Join(tmpDir1, "config")
+	singleCtx := `apiVersion: v1
+kind: Config
+current-context: ctx-a
+clusters:
+- name: cluster-a
+  cluster:
+    server: https://a:6443
+contexts:
+- name: ctx-a
+  context:
+    cluster: cluster-a
+    user: user-a
+    namespace: default
+users:
+- name: user-a
+  user:
+    token: token-a
+`
+	if err := os.WriteFile(tmpKC, []byte(singleCtx), 0600); err != nil {
+		t.Fatalf("failed to write temp kubeconfig: %v", err)
+	}
+
+	// KUBECONFIG = temp (only ctx-a), YAKS_KUBECONFIG = full (ctx-a + ctx-b)
+	t.Setenv("KUBECONFIG", tmpKC)
+	t.Setenv("YAKS_KUBECONFIG", fullPath)
+	t.Setenv("YAKS_DEPTH", "1")
+	t.Setenv("YAKS_ACTIVE", "1")
+
+	// Should be able to switch to ctx-b even though KUBECONFIG only has ctx-a
+	tmpDir2, _, ctx, _, err := setupIsolatedEnv("ctx-b", "kube-system")
+	if err != nil {
+		t.Fatalf("nested setupIsolatedEnv(ctx-b) error: %v — nesting is broken", err)
+	}
+	defer os.RemoveAll(tmpDir2)
+
+	if ctx.Name != "ctx-b" {
+		t.Errorf("ctx.Name = %q, want ctx-b", ctx.Name)
+	}
+	if ctx.Context.Namespace != "kube-system" {
+		t.Errorf("namespace = %q, want kube-system", ctx.Context.Namespace)
 	}
 }
 

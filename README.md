@@ -220,14 +220,24 @@ Simply type `exit` or press `Ctrl+D` to return to the previous shell.
 
 ## Environment variables
 
+### Set by yaks (inside a managed shell)
+
 | Variable | Description |
 |---|---|
-| `KUBECONFIG` | Set to the temp kubeconfig inside a yaks shell |
-| `YAKS_ACTIVE` | Set to `1` when inside a yaks shell |
-| `YAKS_CONTEXT` | Current context name |
-| `YAKS_NAMESPACE` | Current namespace |
-| `YAKS_DEPTH` | Nesting depth (1 for first yaks shell) |
-| `YAKS_CONFIG` | Override hooks config file path (default: `~/.config/yaks/config.yaml`) |
+| `KUBECONFIG` | Path to the temporary isolated kubeconfig created for this shell session |
+| `YAKS_ACTIVE` | Set to `1` when inside a yaks-managed shell; unset otherwise |
+| `YAKS_CONTEXT` | Name of the active Kubernetes context |
+| `YAKS_NAMESPACE` | Name of the active namespace |
+| `YAKS_DEPTH` | Nesting depth of yaks shells (`1` for the first, `2` if you `yaks ctx` again inside, etc.) |\n| `YAKS_KUBECONFIG` | Original `KUBECONFIG` path(s) preserved for nested context switching |
+
+### User-configurable
+
+| Variable | Description |
+|---|---|
+| `YAKS_CONFIG` | Override the hooks config file path (default: `~/.config/yaks/config.yaml`, or `$XDG_CONFIG_HOME/yaks/config.yaml`) |
+| `YAKS_SILENT` | Set to `1` to suppress status messages when switching context/namespace |
+| `YAKS_NO_PROMPT` | Set to `1` to suppress the shell prompt segment (the `[context|namespace]` prefix) even when `yaks init` is sourced |
+| `SHELL` | Used to detect which shell to spawn and which shell runs hook commands (falls back to `/bin/zsh`, `/bin/bash`, `/bin/sh`) |
 
 ## Project structure
 

@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/todda86/yaks/pkg/kubeconfig"
 	"github.com/todda86/yaks/pkg/shell"
 )
 
@@ -23,6 +24,7 @@ Examples:
   yaks exec staging -n monitoring -- kubectl logs -f deploy/prometheus`,
 	Args:               cobra.MinimumNArgs(1),
 	DisableFlagParsing: false,
+	ValidArgsFunction:  completeExecArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		contextName := args[0]
 
@@ -72,6 +74,29 @@ Examples:
 		}
 		return nil
 	},
+}
+
+// completeExecArgs provides tab-completion for the exec command's positional
+// arguments: context name (first arg) and namespace (second arg).
+func completeExecArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	switch len(args) {
+	case 0:
+		// Complete context names
+		cfg, _, err := kubeconfig.LoadAll()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		return cfg.ListContextNames(), cobra.ShellCompDirectiveNoFileComp
+	case 1:
+		// Complete namespace names
+		ns, err := getClusterNamespaces()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		return ns, cobra.ShellCompDirectiveNoFileComp
+	default:
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
 }
 
 func init() {

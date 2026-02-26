@@ -23,7 +23,8 @@ kubeconfig file.
 
 If no namespace is given, an interactive selector is shown listing all
 namespaces in the current cluster (requires kubectl access).`,
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeNamespaceNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var namespace string
 
@@ -94,6 +95,19 @@ namespaces in the current cluster (requires kubectl access).`,
 
 		return nil
 	},
+}
+
+// completeNamespaceNames provides tab-completion for namespace names by
+// querying the cluster via kubectl.
+func completeNamespaceNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	ns, err := getClusterNamespaces()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	return ns, cobra.ShellCompDirectiveNoFileComp
 }
 
 func getClusterNamespaces() ([]string, error) {

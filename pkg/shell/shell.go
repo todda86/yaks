@@ -147,7 +147,8 @@ func ExecCommandWithConfig(contextName, namespace string, command []string, cfg 
 // setupIsolatedEnv prepares a temporary kubeconfig scoped to one context/namespace
 // and returns the tmpDir path, kubeconfig path, resolved context, and base env.
 func setupIsolatedEnv(contextName, namespace string) (tmpDir, tmpKubeconfig string, ctx *kubeconfig.NamedContext, env []string, err error) {
-	// Load the full kubeconfig
+	// Load the full kubeconfig (AllKubeconfigPaths prefers YAKS_KUBECONFIG
+	// when set, so nested shells automatically see all original contexts).
 	cfg, _, err := kubeconfig.LoadAll()
 	if err != nil {
 		return "", "", nil, nil, fmt.Errorf("failed to load kubeconfig: %w", err)
@@ -253,16 +254,28 @@ func buildEnv(kubeconfigPath, context, namespace string, depth int) []string {
 	for _, e := range env {
 		key := strings.SplitN(e, "=", 2)[0]
 		switch key {
-		case "KUBECONFIG", "YAKS_CONTEXT", "YAKS_NAMESPACE", "YAKS_DEPTH", "YAKS_ACTIVE":
+		case "KUBECONFIG", "YAKS_CONTEXT", "YAKS_NAMESPACE", "YAKS_DEPTH", "YAKS_ACTIVE", "YAKS_KUBECONFIG":
 			continue
 		default:
 			filtered = append(filtered, e)
 		}
 	}
 
+	// Preserve the original KUBECONFIG so nested yaks shells can find all contexts.
+	// If we're already inside a yaks shell, carry forward the saved original.
+	originalKC := os.Getenv("YAKS_KUBECONFIG")
+	if originalKC == "" {
+		// First yaks shell — save the real KUBECONFIG paths
+		originalKC = os.Getenv("KUBECONFIG")
+		if originalKC == "" {
+			originalKC = kubeconfig.DefaultKubeconfigPath()
+		}
+	}
+
 	// Add yaks-specific vars
 	filtered = append(filtered,
 		fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
+		fmt.Sprintf("YAKS_KUBECONFIG=%s", originalKC),
 		fmt.Sprintf("YAKS_CONTEXT=%s", context),
 		fmt.Sprintf("YAKS_NAMESPACE=%s", namespace),
 		fmt.Sprintf("YAKS_DEPTH=%d", depth),

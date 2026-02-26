@@ -24,7 +24,8 @@ selector is shown (using fzf if available).
 The sub-shell gets its own KUBECONFIG pointing to a temporary file
 containing only the selected context, so changes don't affect other
 terminals.`,
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeContextNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, _, err := kubeconfig.LoadAll()
 		if err != nil {
@@ -72,6 +73,18 @@ terminals.`,
 
 		return shell.SpawnShell(contextName, ctxNamespace)
 	},
+}
+
+// completeContextNames provides tab-completion for Kubernetes context names.
+func completeContextNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	cfg, _, err := kubeconfig.LoadAll()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	return cfg.ListContextNames(), cobra.ShellCompDirectiveNoFileComp
 }
 
 func init() {

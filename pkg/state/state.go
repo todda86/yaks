@@ -26,6 +26,12 @@ func Quiet() bool {
 	return os.Getenv("YAKS_SILENT") == "1"
 }
 
+// NoPrompt returns true if the shell prompt segment should be suppressed.
+// Set YAKS_NO_PROMPT=1 to suppress.
+func NoPrompt() bool {
+	return os.Getenv("YAKS_NO_PROMPT") == "1"
+}
+
 // GetDepth returns the current nesting depth of yaks shells.
 func GetDepth() int {
 	d, err := strconv.Atoi(os.Getenv("YAKS_DEPTH"))

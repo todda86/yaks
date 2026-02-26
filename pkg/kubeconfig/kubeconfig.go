@@ -89,8 +89,14 @@ type AuthProvider struct {
 
 // DefaultKubeconfigPath returns the default kubeconfig path for the current OS.
 func DefaultKubeconfigPath() string {
-	if env := os.Getenv("KUBECONFIG"); env != "" {
-		// Return the first path in KUBECONFIG if multiple are specified
+	// Prefer YAKS_KUBECONFIG when inside a yaks shell so we see all contexts,
+	// not just the temporary single-context file that KUBECONFIG points to.
+	env := os.Getenv("YAKS_KUBECONFIG")
+	if env == "" {
+		env = os.Getenv("KUBECONFIG")
+	}
+	if env != "" {
+		// Return the first path if multiple are specified
 		sep := ":"
 		if runtime.GOOS == "windows" {
 			sep = ";"
@@ -110,8 +116,16 @@ func DefaultKubeconfigPath() string {
 
 // AllKubeconfigPaths returns all kubeconfig paths from the KUBECONFIG env var
 // or the default path if the env var is not set.
+// When running inside a yaks shell, YAKS_KUBECONFIG is preferred so that
+// nested invocations can see all original contexts instead of only the
+// temporary single-context file.
 func AllKubeconfigPaths() []string {
-	if env := os.Getenv("KUBECONFIG"); env != "" {
+	// Prefer YAKS_KUBECONFIG (original paths) over KUBECONFIG (temp file).
+	env := os.Getenv("YAKS_KUBECONFIG")
+	if env == "" {
+		env = os.Getenv("KUBECONFIG")
+	}
+	if env != "" {
 		sep := ":"
 		if runtime.GOOS == "windows" {
 			sep = ";"

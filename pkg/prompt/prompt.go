@@ -10,7 +10,7 @@ import (
 // PromptSegment returns a formatted string suitable for embedding in a shell prompt.
 // The format is: [context|namespace]
 func PromptSegment() string {
-	if !state.IsActive() {
+	if !state.IsActive() || state.NoPrompt() {
 		return ""
 	}
 
@@ -30,7 +30,7 @@ func PromptSegment() string {
 
 // PromptSegmentColored returns a colored prompt segment for terminals that support ANSI colors.
 func PromptSegmentColored() string {
-	if !state.IsActive() {
+	if !state.IsActive() || state.NoPrompt() {
 		return ""
 	}
 
@@ -51,7 +51,7 @@ func PromptSegmentColored() string {
 
 // ZshPrompt returns a zsh-compatible prompt segment using %F{} color codes.
 func ZshPrompt() string {
-	if !state.IsActive() {
+	if !state.IsActive() || state.NoPrompt() {
 		return ""
 	}
 
@@ -72,7 +72,7 @@ func ZshPrompt() string {
 // FishPrompt returns a fish-compatible prompt function body.
 func FishPrompt() string {
 	return strings.TrimSpace(`
-if set -q YAKS_ACTIVE
+if set -q YAKS_ACTIVE; and not set -q YAKS_NO_PROMPT
     set_color cyan
     echo -n $YAKS_CONTEXT
     set_color normal
@@ -87,7 +87,7 @@ end
 
 // BashPrompt returns a bash PS1 segment.
 func BashPrompt() string {
-	if !state.IsActive() {
+	if !state.IsActive() || state.NoPrompt() {
 		return ""
 	}
 
@@ -125,12 +125,12 @@ func bashInit() string {
 #   eval "$(yaks init bash)"
 
 __yaks_ps1() {
-    if [ -n "$YAKS_ACTIVE" ]; then
+    if [ -n "$YAKS_ACTIVE" ] && [ -z "$YAKS_NO_PROMPT" ]; then
         echo -n "[\[\033[1;36m\]${YAKS_CONTEXT}\[\033[0m\]|\[\033[1;33m\]${YAKS_NAMESPACE}\[\033[0m\]] "
     fi
 }
 
-if [ -n "$YAKS_ACTIVE" ]; then
+if [ -n "$YAKS_ACTIVE" ] && [ -z "$YAKS_NO_PROMPT" ]; then
     PS1="$(__yaks_ps1)${PS1}"
 fi
 `
@@ -142,12 +142,12 @@ func zshInit() string {
 #   eval "$(yaks init zsh)"
 
 __yaks_ps1() {
-    if [[ -n "$YAKS_ACTIVE" ]]; then
+    if [[ -n "$YAKS_ACTIVE" ]] && [[ -z "$YAKS_NO_PROMPT" ]]; then
         echo -n "[%F{cyan}${YAKS_CONTEXT}%f|%F{yellow}${YAKS_NAMESPACE}%f] "
     fi
 }
 
-if [[ -n "$YAKS_ACTIVE" ]]; then
+if [[ -n "$YAKS_ACTIVE" ]] && [[ -z "$YAKS_NO_PROMPT" ]]; then
     PROMPT="$(__yaks_ps1)${PROMPT}"
 fi
 `
@@ -159,7 +159,7 @@ func fishInit() string {
 #   yaks init fish | source
 
 function __yaks_ps1
-    if set -q YAKS_ACTIVE
+    if set -q YAKS_ACTIVE; and not set -q YAKS_NO_PROMPT
         set_color cyan
         echo -n $YAKS_CONTEXT
         set_color normal
@@ -172,7 +172,7 @@ function __yaks_ps1
 end
 
 # Prepend to fish_prompt if yaks is active
-if set -q YAKS_ACTIVE
+if set -q YAKS_ACTIVE; and not set -q YAKS_NO_PROMPT
     functions -c fish_prompt __yaks_original_prompt
     function fish_prompt
         __yaks_ps1
