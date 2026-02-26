@@ -1,0 +1,23 @@
+# Binaries
+yaks
+yaks.exe
+dist/
+
+# Go
+*.test
+*.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp kubeconfigs
+yaks-*/

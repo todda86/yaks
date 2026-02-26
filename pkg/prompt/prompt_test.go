@@ -1,0 +1,168 @@
+package prompt
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestPromptSegment_Inactive(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "")
+	if got := PromptSegment(); got != "" {
+		t.Errorf("PromptSegment() = %q, want empty when inactive", got)
+	}
+}
+
+func TestPromptSegment_Active(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_CONTEXT", "prod")
+	t.Setenv("YAKS_NAMESPACE", "monitoring")
+
+	got := PromptSegment()
+	want := "[prod|monitoring]"
+	if got != want {
+		t.Errorf("PromptSegment() = %q, want %q", got, want)
+	}
+}
+
+func TestPromptSegment_DefaultNamespace(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_CONTEXT", "dev")
+	t.Setenv("YAKS_NAMESPACE", "")
+
+	got := PromptSegment()
+	want := "[dev|default]"
+	if got != want {
+		t.Errorf("PromptSegment() = %q, want %q", got, want)
+	}
+}
+
+func TestPromptSegment_NoContext(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_CONTEXT", "")
+
+	if got := PromptSegment(); got != "" {
+		t.Errorf("PromptSegment() = %q, want empty when no context", got)
+	}
+}
+
+func TestPromptSegmentColored_Inactive(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "")
+	if got := PromptSegmentColored(); got != "" {
+		t.Errorf("PromptSegmentColored() = %q, want empty when inactive", got)
+	}
+}
+
+func TestPromptSegmentColored_Active(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_CONTEXT", "prod")
+	t.Setenv("YAKS_NAMESPACE", "kube-system")
+
+	got := PromptSegmentColored()
+	if !strings.Contains(got, "prod") {
+		t.Errorf("PromptSegmentColored() missing context name")
+	}
+	if !strings.Contains(got, "kube-system") {
+		t.Errorf("PromptSegmentColored() missing namespace")
+	}
+}
+
+func TestZshPrompt_Inactive(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "")
+	if got := ZshPrompt(); got != "" {
+		t.Errorf("ZshPrompt() = %q, want empty when inactive", got)
+	}
+}
+
+func TestZshPrompt_Active(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_CONTEXT", "staging")
+	t.Setenv("YAKS_NAMESPACE", "apps")
+
+	got := ZshPrompt()
+	if !strings.Contains(got, "staging") || !strings.Contains(got, "apps") {
+		t.Errorf("ZshPrompt() = %q, missing context/namespace", got)
+	}
+	if !strings.Contains(got, "%F{cyan}") || !strings.Contains(got, "%F{yellow}") {
+		t.Errorf("ZshPrompt() missing zsh color codes")
+	}
+}
+
+func TestBashPrompt_Inactive(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "")
+	if got := BashPrompt(); got != "" {
+		t.Errorf("BashPrompt() = %q, want empty when inactive", got)
+	}
+}
+
+func TestBashPrompt_Active(t *testing.T) {
+	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_CONTEXT", "prod")
+	t.Setenv("YAKS_NAMESPACE", "default")
+
+	got := BashPrompt()
+	if !strings.Contains(got, "prod") || !strings.Contains(got, "default") {
+		t.Errorf("BashPrompt() missing context/namespace")
+	}
+}
+
+func TestFishPrompt(t *testing.T) {
+	got := FishPrompt()
+	if !strings.Contains(got, "YAKS_ACTIVE") {
+		t.Errorf("FishPrompt() missing YAKS_ACTIVE check")
+	}
+	if !strings.Contains(got, "set_color cyan") {
+		t.Errorf("FishPrompt() missing cyan color")
+	}
+	if !strings.Contains(got, "YAKS_CONTEXT") {
+		t.Errorf("FishPrompt() missing YAKS_CONTEXT")
+	}
+	if !strings.Contains(got, "YAKS_NAMESPACE") {
+		t.Errorf("FishPrompt() missing YAKS_NAMESPACE")
+	}
+}
+
+func TestShellInit_Bash(t *testing.T) {
+	got := ShellInit("bash")
+	if got == "" {
+		t.Fatal("ShellInit(bash) returned empty string")
+	}
+	if !strings.Contains(got, "__yaks_ps1") {
+		t.Error("ShellInit(bash) missing __yaks_ps1 function")
+	}
+	if !strings.Contains(got, "YAKS_ACTIVE") {
+		t.Error("ShellInit(bash) missing YAKS_ACTIVE check")
+	}
+}
+
+func TestShellInit_Zsh(t *testing.T) {
+	got := ShellInit("zsh")
+	if got == "" {
+		t.Fatal("ShellInit(zsh) returned empty string")
+	}
+	if !strings.Contains(got, "__yaks_ps1") {
+		t.Error("ShellInit(zsh) missing __yaks_ps1 function")
+	}
+	if !strings.Contains(got, "PROMPT") {
+		t.Error("ShellInit(zsh) missing PROMPT variable")
+	}
+}
+
+func TestShellInit_Fish(t *testing.T) {
+	got := ShellInit("fish")
+	if got == "" {
+		t.Fatal("ShellInit(fish) returned empty string")
+	}
+	if !strings.Contains(got, "__yaks_ps1") {
+		t.Error("ShellInit(fish) missing __yaks_ps1 function")
+	}
+	if !strings.Contains(got, "fish_prompt") {
+		t.Error("ShellInit(fish) missing fish_prompt")
+	}
+}
+
+func TestShellInit_Unsupported(t *testing.T) {
+	got := ShellInit("powershell")
+	if got != "" {
+		t.Errorf("ShellInit(powershell) = %q, want empty for unsupported shell", got)
+	}
+}
