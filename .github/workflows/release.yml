@@ -44,12 +44,11 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
+          SUFFIX: ${{ matrix.suffix }}
         run: |
           VERSION="${GITHUB_REF_NAME}"
           BINARY="yaks-${GOOS}-${GOARCH}${SUFFIX}"
           go build -trimpath -ldflags "-s -w -X github.com/todda86/yaks/cmd.version=${VERSION}" -o "${BINARY}" .
-        env:
-          SUFFIX: ${{ matrix.suffix }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
