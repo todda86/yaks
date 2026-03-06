@@ -146,11 +146,14 @@ func TestShellInit_Bash(t *testing.T) {
 	if got == "" {
 		t.Fatal("ShellInit(bash) returned empty string")
 	}
-	if !strings.Contains(got, "__yaks_ps1") {
-		t.Error("ShellInit(bash) missing __yaks_ps1 function")
+	if !strings.Contains(got, "__yaks_prompt_command") {
+		t.Error("ShellInit(bash) missing __yaks_prompt_command function")
 	}
 	if !strings.Contains(got, "YAKS_ACTIVE") {
 		t.Error("ShellInit(bash) missing YAKS_ACTIVE check")
+	}
+	if !strings.Contains(got, "--shell-eval bash") {
+		t.Error("ShellInit(bash) missing --shell-eval wrapper")
 	}
 }
 
@@ -159,11 +162,14 @@ func TestShellInit_Zsh(t *testing.T) {
 	if got == "" {
 		t.Fatal("ShellInit(zsh) returned empty string")
 	}
-	if !strings.Contains(got, "__yaks_ps1") {
-		t.Error("ShellInit(zsh) missing __yaks_ps1 function")
+	if !strings.Contains(got, "__yaks_update_prompt") {
+		t.Error("ShellInit(zsh) missing __yaks_update_prompt function")
 	}
 	if !strings.Contains(got, "PROMPT") {
 		t.Error("ShellInit(zsh) missing PROMPT variable")
+	}
+	if !strings.Contains(got, "--shell-eval zsh") {
+		t.Error("ShellInit(zsh) missing --shell-eval wrapper")
 	}
 }
 
@@ -178,11 +184,33 @@ func TestShellInit_Fish(t *testing.T) {
 	if !strings.Contains(got, "fish_prompt") {
 		t.Error("ShellInit(fish) missing fish_prompt")
 	}
+	if !strings.Contains(got, "--shell-eval fish") {
+		t.Error("ShellInit(fish) missing --shell-eval wrapper")
+	}
 }
 
 func TestShellInit_Unsupported(t *testing.T) {
-	got := ShellInit("powershell")
+	got := ShellInit("tcsh")
 	if got != "" {
-		t.Errorf("ShellInit(powershell) = %q, want empty for unsupported shell", got)
+		t.Errorf("ShellInit(tcsh) = %q, want empty for unsupported shell", got)
+	}
+}
+
+func TestShellInit_PowerShell(t *testing.T) {
+	got := ShellInit("powershell")
+	if got == "" {
+		t.Fatal("ShellInit(powershell) returned empty string")
+	}
+	if !strings.Contains(got, "$env:YAKS_ACTIVE") {
+		t.Error("ShellInit(powershell) missing YAKS_ACTIVE check")
+	}
+	if !strings.Contains(got, "--shell-eval powershell") {
+		t.Error("ShellInit(powershell) missing --shell-eval wrapper")
+	}
+	if !strings.Contains(got, "Invoke-Expression") {
+		t.Error("ShellInit(powershell) missing Invoke-Expression")
+	}
+	if !strings.Contains(got, "function prompt") {
+		t.Error("ShellInit(powershell) missing prompt function")
 	}
 }

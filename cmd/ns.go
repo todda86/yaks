@@ -10,8 +10,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/todda86/yaks/pkg/fzf"
 	"github.com/todda86/yaks/pkg/kubeconfig"
+	"github.com/todda86/yaks/pkg/shell"
 	"github.com/todda86/yaks/pkg/state"
 )
+
+var nsShellEval string
 
 var nsCmd = &cobra.Command{
 	Use:     "ns [namespace]",
@@ -30,6 +33,20 @@ namespaces in the current cluster (requires kubectl access).`,
 
 		if len(args) > 0 {
 			namespace = args[0]
+			namespaces, err := getClusterNamespaces()
+			if err != nil {
+				return fmt.Errorf("failed to verify namespace: %w", err)
+			}
+			found := false
+			for _, ns := range namespaces {
+				if ns == namespace {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("namespace %q does not exist in the current cluster", namespace)
+			}
 		} else {
 			namespaces, err := getClusterNamespaces()
 			if err != nil {
@@ -88,6 +105,19 @@ namespaces in the current cluster (requires kubectl access).`,
 			os.Setenv("YAKS_NAMESPACE", namespace)
 		}
 
+		// Eval mode: output shell commands for the wrapper to eval
+		if nsShellEval != "" {
+			script := shell.NsEnvScript(nsShellEval, namespace)
+			if script == "" {
+				return fmt.Errorf("unsupported shell type for --shell-eval: %s", nsShellEval)
+			}
+			if !state.Quiet() {
+				fmt.Fprintf(os.Stderr, "\033[1;33m%s\033[0m — namespace set\n", namespace)
+			}
+			fmt.Print(script)
+			return nil
+		}
+
 		if !state.Quiet() {
 			yellow := color.New(color.FgYellow, color.Bold)
 			yellow.Printf("Namespace set to: %s\n", namespace)
@@ -108,6 +138,11 @@ func completeNamespaceNames(cmd *cobra.Command, args []string, toComplete string
 		return nil, cobra.ShellCompDirectiveError
 	}
 	return ns, cobra.ShellCompDirectiveNoFileComp
+}
+
+func init() {
+	nsCmd.Flags().StringVar(&nsShellEval, "shell-eval", "", "Output eval commands for namespace update (used by shell wrapper)")
+	nsCmd.Flags().MarkHidden("shell-eval")
 }
 
 func getClusterNamespaces() ([]string, error) {

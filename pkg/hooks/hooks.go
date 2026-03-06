@@ -16,6 +16,7 @@ type Hook struct {
 	Name    string `yaml:"name"`
 	Match   string `yaml:"match"`
 	Command string `yaml:"command"`
+	Stop    bool   `yaml:"stop"`
 }
 
 // Config holds the hooks configuration.
@@ -70,15 +71,22 @@ func LoadConfigFrom(path string) (*Config, error) {
 }
 
 // MatchingHooks returns hooks whose Match pattern matches the context name.
+// If a matched hook has Stop set to true, no further hooks are evaluated.
 func MatchingHooks(hooks []Hook, contextName string) []Hook {
 	var matched []Hook
 	for _, h := range hooks {
 		if h.Match == "" {
 			matched = append(matched, h)
+			if h.Stop {
+				break
+			}
 			continue
 		}
 		if ok, _ := filepath.Match(h.Match, contextName); ok {
 			matched = append(matched, h)
+			if h.Stop {
+				break
+			}
 		}
 	}
 	return matched
@@ -87,6 +95,16 @@ func MatchingHooks(hooks []Hook, contextName string) []Hook {
 // RunHooks executes each hook command through the user shell.
 // Failures print a warning but do not abort.
 func RunHooks(hooks []Hook, env []string) {
+	runHooksWithStdout(hooks, env, os.Stdout)
+}
+
+// RunHooksToStderr is like RunHooks but redirects hook stdout to stderr.
+// Use this when the caller's stdout is reserved for structured output (e.g. eval scripts).
+func RunHooksToStderr(hooks []Hook, env []string) {
+	runHooksWithStdout(hooks, env, os.Stderr)
+}
+
+func runHooksWithStdout(hooks []Hook, env []string, stdout *os.File) {
 	shellBin := hookShell()
 	for _, h := range hooks {
 		if h.Command == "" {
@@ -95,7 +113,7 @@ func RunHooks(hooks []Hook, env []string) {
 		cmd := exec.Command(shellBin, "-c", h.Command)
 		cmd.Env = env
 		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
+		cmd.Stdout = stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			label := h.Name

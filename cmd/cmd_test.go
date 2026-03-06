@@ -185,6 +185,26 @@ func TestCtxCommand_HasNamespaceFlag(t *testing.T) {
 	}
 }
 
+func TestCtxCommand_HasShellEvalFlag(t *testing.T) {
+	flag := ctxCmd.Flags().Lookup("shell-eval")
+	if flag == nil {
+		t.Fatal("ctx command missing --shell-eval flag")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("shell-eval flag default = %q, want empty", flag.DefValue)
+	}
+}
+
+func TestNsCommand_HasShellEvalFlag(t *testing.T) {
+	flag := nsCmd.Flags().Lookup("shell-eval")
+	if flag == nil {
+		t.Fatal("ns command missing --shell-eval flag")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("shell-eval flag default = %q, want empty", flag.DefValue)
+	}
+}
+
 func TestListCommand_HasSubcommands(t *testing.T) {
 	subNames := make(map[string]bool)
 	for _, sub := range listCmd.Commands() {

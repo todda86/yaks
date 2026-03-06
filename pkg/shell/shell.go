@@ -144,6 +144,92 @@ func ExecCommandWithConfig(contextName, namespace string, command []string, cfg 
 	return 0, nil
 }
 
+// SetupIsolatedEnv creates an isolated kubeconfig for the given context/namespace
+// and returns the paths and resolved values. The caller is responsible for
+// cleaning up tmpDir when appropriate.
+func SetupIsolatedEnv(contextName, namespace string) (tmpDir, kubeconfigPath, resolvedContext, resolvedNamespace string, err error) {
+	td, kc, ctx, _, e := setupIsolatedEnv(contextName, namespace)
+	if e != nil {
+		return "", "", "", "", e
+	}
+	return td, kc, contextName, ctx.Context.Namespace, nil
+}
+
+// OriginalKubeconfig returns the original KUBECONFIG path before yaks isolation.
+// It checks YAKS_KUBECONFIG first (set by a prior yaks ctx switch), then falls
+// back to KUBECONFIG, then to the platform default.
+func OriginalKubeconfig() string {
+	if kc := os.Getenv("YAKS_KUBECONFIG"); kc != "" {
+		return kc
+	}
+	if kc := os.Getenv("KUBECONFIG"); kc != "" {
+		return kc
+	}
+	return kubeconfig.DefaultKubeconfigPath()
+}
+
+// EnvScript returns shell commands that set yaks environment variables
+// for the given shell type. This is used by the shell wrapper function
+// (set up via "yaks init") to apply context switches in the current shell
+// without spawning a subshell.
+func EnvScript(shellType, tmpDir, kubeconfigPath, originalKC, context, namespace string) string {
+	switch shellType {
+	case "fish":
+		var b strings.Builder
+		fmt.Fprintf(&b, "set -gx KUBECONFIG %s\n", shellQuote(kubeconfigPath))
+		fmt.Fprintf(&b, "set -gx YAKS_KUBECONFIG %s\n", shellQuote(originalKC))
+		fmt.Fprintf(&b, "set -gx YAKS_CONTEXT %s\n", shellQuote(context))
+		fmt.Fprintf(&b, "set -gx YAKS_NAMESPACE %s\n", shellQuote(namespace))
+		fmt.Fprintf(&b, "set -gx YAKS_ACTIVE 1\n")
+		fmt.Fprintf(&b, "set -gx YAKS_TMPDIR %s\n", shellQuote(tmpDir))
+		return b.String()
+	case "bash", "zsh":
+		var b strings.Builder
+		fmt.Fprintf(&b, "export KUBECONFIG=%s\n", shellQuote(kubeconfigPath))
+		fmt.Fprintf(&b, "export YAKS_KUBECONFIG=%s\n", shellQuote(originalKC))
+		fmt.Fprintf(&b, "export YAKS_CONTEXT=%s\n", shellQuote(context))
+		fmt.Fprintf(&b, "export YAKS_NAMESPACE=%s\n", shellQuote(namespace))
+		fmt.Fprintf(&b, "export YAKS_ACTIVE=1\n")
+		fmt.Fprintf(&b, "export YAKS_TMPDIR=%s\n", shellQuote(tmpDir))
+		return b.String()
+	case "powershell":
+		var b strings.Builder
+		fmt.Fprintf(&b, "$env:KUBECONFIG = %s\n", psQuote(kubeconfigPath))
+		fmt.Fprintf(&b, "$env:YAKS_KUBECONFIG = %s\n", psQuote(originalKC))
+		fmt.Fprintf(&b, "$env:YAKS_CONTEXT = %s\n", psQuote(context))
+		fmt.Fprintf(&b, "$env:YAKS_NAMESPACE = %s\n", psQuote(namespace))
+		fmt.Fprintf(&b, "$env:YAKS_ACTIVE = '1'\n")
+		fmt.Fprintf(&b, "$env:YAKS_TMPDIR = %s\n", psQuote(tmpDir))
+		return b.String()
+	default:
+		return ""
+	}
+}
+
+// NsEnvScript returns shell commands to update the YAKS_NAMESPACE variable.
+func NsEnvScript(shellType, namespace string) string {
+	switch shellType {
+	case "fish":
+		return fmt.Sprintf("set -gx YAKS_NAMESPACE %s\n", shellQuote(namespace))
+	case "bash", "zsh":
+		return fmt.Sprintf("export YAKS_NAMESPACE=%s\n", shellQuote(namespace))
+	case "powershell":
+		return fmt.Sprintf("$env:YAKS_NAMESPACE = %s\n", psQuote(namespace))
+	default:
+		return ""
+	}
+}
+
+// shellQuote returns a single-quoted string safe for shell eval.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// psQuote returns a single-quoted string safe for PowerShell Invoke-Expression.
+func psQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
 // setupIsolatedEnv prepares a temporary kubeconfig scoped to one context/namespace
 // and returns the tmpDir path, kubeconfig path, resolved context, and base env.
 func setupIsolatedEnv(contextName, namespace string) (tmpDir, tmpKubeconfig string, ctx *kubeconfig.NamedContext, env []string, err error) {

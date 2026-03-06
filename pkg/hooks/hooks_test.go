@@ -191,6 +191,95 @@ func TestMatchingHooks_EmptyList(t *testing.T) {
 	}
 }
 
+func TestMatchingHooks_StopPreventsLater(t *testing.T) {
+	hooks := []Hook{
+		{Name: "prod-bg", Match: "prod-*", Command: "echo red", Stop: true},
+		{Name: "default-bg", Match: "*", Command: "echo black"},
+	}
+
+	matched := MatchingHooks(hooks, "prod-us-east")
+	if len(matched) != 1 {
+		t.Fatalf("len(matched) = %d, want 1", len(matched))
+	}
+	if matched[0].Name != "prod-bg" {
+		t.Errorf("matched[0].Name = %q, want %q", matched[0].Name, "prod-bg")
+	}
+}
+
+func TestMatchingHooks_StopOnGlobal(t *testing.T) {
+	hooks := []Hook{
+		{Name: "staging", Match: "staging-*", Command: "echo staging"},
+		{Name: "catch-all", Match: "", Command: "echo default", Stop: true},
+		{Name: "never", Match: "*", Command: "echo never"},
+	}
+
+	matched := MatchingHooks(hooks, "dev-cluster")
+	if len(matched) != 1 {
+		t.Fatalf("len(matched) = %d, want 1", len(matched))
+	}
+	if matched[0].Name != "catch-all" {
+		t.Errorf("matched[0].Name = %q, want %q", matched[0].Name, "catch-all")
+	}
+}
+
+func TestMatchingHooks_StopDoesNotAffectNonMatch(t *testing.T) {
+	hooks := []Hook{
+		{Name: "prod-bg", Match: "prod-*", Command: "echo red", Stop: true},
+		{Name: "default-bg", Match: "*", Command: "echo black"},
+	}
+
+	// "dev-cluster" doesn't match "prod-*", so Stop on prod-bg is irrelevant
+	matched := MatchingHooks(hooks, "dev-cluster")
+	if len(matched) != 1 {
+		t.Fatalf("len(matched) = %d, want 1", len(matched))
+	}
+	if matched[0].Name != "default-bg" {
+		t.Errorf("matched[0].Name = %q, want %q", matched[0].Name, "default-bg")
+	}
+}
+
+func TestMatchingHooks_NoStopCollectsAll(t *testing.T) {
+	hooks := []Hook{
+		{Name: "a", Match: "prod-*", Command: "echo a"},
+		{Name: "b", Match: "*", Command: "echo b"},
+		{Name: "c", Match: "", Command: "echo c"},
+	}
+
+	matched := MatchingHooks(hooks, "prod-us")
+	if len(matched) != 3 {
+		t.Fatalf("len(matched) = %d, want 3", len(matched))
+	}
+}
+
+func TestLoadConfig_StopField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `hooks:
+  post:
+    - name: prod-bg
+      match: "*prod*"
+      command: "printf '\\e]11;#3a1010\\a'"
+      stop: true
+    - name: default-bg
+      match: "*"
+      command: "printf '\\e]11;#000000\\a'"
+`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfigFrom(path)
+	if err != nil {
+		t.Fatalf("LoadConfigFrom() error: %v", err)
+	}
+	if !cfg.Hooks.Post[0].Stop {
+		t.Error("expected Post[0].Stop to be true")
+	}
+	if cfg.Hooks.Post[1].Stop {
+		t.Error("expected Post[1].Stop to be false")
+	}
+}
+
 func TestRunHooks_ExecutesCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping hook execution test on windows")

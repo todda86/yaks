@@ -44,12 +44,12 @@ func selectWithFzf(items []string, prompt string) (string, error) {
 }
 
 func selectWithList(items []string, prompt string) (string, error) {
-	fmt.Printf("%s:\n", prompt)
+	fmt.Fprintf(os.Stderr, "%s:\n", prompt)
 	for i, item := range items {
-		fmt.Printf("  %d) %s\n", i+1, item)
+		fmt.Fprintf(os.Stderr, "  %d) %s\n", i+1, item)
 	}
 
-	fmt.Print("\nEnter number: ")
+	fmt.Fprint(os.Stderr, "\nEnter number: ")
 	var choice int
 	_, err := fmt.Scanf("%d", &choice)
 	if err != nil {

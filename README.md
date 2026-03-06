@@ -7,18 +7,17 @@ A multiplatform Kubernetes context and namespace switcher written in Go.  it was
 >
 > This project is in no way meant to be a replacement for [kubie](https://github.com/sbstp/kubie). No claims are made to the great ideas implemented in the OG [kubie](https://github.com/sbstp/kubie). I simply wanted a Windows-capable version. If you are able, you really should probably stick to it. Using this cheap knockoff will probably delete all your pods, make your nodes NotReady and may even cause warts.
 
-yaks spawns **isolated sub-shells** with per-session kubeconfig files so context/namespace changes don't leak between terminals.
+yaks uses **in-place eval-based switching** (bash, zsh, fish, PowerShell) so context and namespace changes happen in your current shell — no sub-shell nesting. Each session gets its own temporary kubeconfig so changes don't leak between terminals.
 
 ## Features
 
-- **Context switching** — spawn a new shell scoped to a single context
-- **Namespace switching** — change namespaces within the current context
-- **Isolated sessions** — each shell gets its own temporary kubeconfig
+- **Context switching** — switch contexts in-place via shell wrapper functions (no sub-shells)
+- **Namespace switching** — change namespaces within the current context, with existence validation
+- **Isolated sessions** — each session gets its own temporary kubeconfig
 - **Interactive selection** — uses [fzf](https://github.com/junegunn/fzf) when available, falls back to numbered list
-- **Shell prompt integration** — bash, zsh, and fish support
-- **Nested shells** — depth tracking for nested context sessions
+- **Shell prompt integration** — bash, zsh, fish, and PowerShell support
 - **Multi-kubeconfig** — merges all files from `KUBECONFIG` env var
-- **Pre/post/exit hooks** — run commands on context enter, after shell spawn, and on exit
+- **Pre/post/exit hooks** — run commands on context enter/switch with glob matching and first-match `stop` control
 - **Cross-platform** — builds for Linux, macOS, and Windows (amd64/arm64)
 
 ## Installation
@@ -122,6 +121,11 @@ eval "$(yaks init zsh)"
 yaks init fish | source
 ```
 
+**PowerShell** (`$PROFILE`):
+```powershell
+yaks init powershell | Out-String | Invoke-Expression
+```
+
 ### Shell completions
 
 ```bash
@@ -144,30 +148,42 @@ yaks supports pre, post, and exit hooks that run shell commands at context-switc
 
 ```yaml
 hooks:
-  # Run before the sub-shell spawns
+  # Run before the context switch
   pre:
     - name: "warn-prod"
       match: "prod-*"           # glob pattern on context name; omit to match all
       command: "echo '⚠️  PRODUCTION CONTEXT'"
 
-  # Run after the sub-shell spawns (before you get the prompt)
+  # Run after the context switch
   post:
     - name: "prod-bg"
       match: "prod-*"
       command: "printf '\e]11;#3a0000\a'"   # dark red background
-    - name: "set-aws"
-      match: "aws-*"
-      command: "export AWS_PROFILE=my-profile"
+      stop: true                             # don't evaluate further hooks
+    - name: "default-bg"
+      match: "*"
+      command: "printf '\e]11;#000000\a'"   # default black background
 
-  # Run after the sub-shell exits (cleanup)
+  # Run on exit (cleanup)
   exit:
     - name: "reset-bg"
       command: "printf '\e]11;#000000\a'"   # reset to black
 ```
 
+#### Hook fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | A descriptive label for the hook |
+| `match` | string | Glob pattern matched against the context name. Omit or leave empty to match all contexts |
+| `command` | string | Shell command to execute |
+| `stop` | bool | When `true`, no further hooks in the list are evaluated after this one matches |
+
 Hooks receive the full yaks environment (`YAKS_CONTEXT`, `YAKS_NAMESPACE`, etc.) and are executed through your `$SHELL`, so shell functions and aliases work normally.
 
 A hook failure prints a warning but does **not** abort the context switch or other hooks.
+
+> **Tip:** Use `stop: true` on specific patterns before a wildcard catch-all to implement first-match-wins behavior (e.g., set a red background for prod contexts, black for everything else).
 
 #### Example: terminal background color per context (fish)
 
@@ -200,23 +216,24 @@ hooks:
 
 Now every time you enter a prod context, your terminal goes red. When you `exit`, it resets.
 
-### Exit a yaks shell
-
-Simply type `exit` or press `Ctrl+D` to return to the previous shell.
-
 ## How it works
 
-1. When you run `yaks ctx <context>`, it:
-   - Loads and merges all kubeconfig files from `KUBECONFIG`
+1. When you run `yaks ctx <context>` (with shell init sourced):
+   - The shell wrapper function calls `yaks ctx --shell-eval <shell> <context>`
+   - yaks loads and merges all kubeconfig files from `KUBECONFIG`
    - Creates a **temporary kubeconfig** with only the selected context
-   - Spawns a new sub-shell with `KUBECONFIG` pointing to the temp file
-   - Sets `YAKS_ACTIVE`, `YAKS_CONTEXT`, `YAKS_NAMESPACE`, and `YAKS_DEPTH` environment variables
+   - Outputs shell-specific `export`/`set` commands to stdout
+   - The wrapper function **evals** the output, setting env vars in your current shell — no sub-shell spawned
+   - Runs any matching pre/post hooks
 
-2. When you run `yaks ns <namespace>`, it:
-   - Updates the namespace in the current kubeconfig (isolated if in a yaks shell)
-   - Updates the `YAKS_NAMESPACE` environment variable
+2. When you run `yaks ns <namespace>`:
+   - Validates the namespace exists in the cluster (via `kubectl`)
+   - Updates the namespace in the current kubeconfig
+   - Sets `YAKS_NAMESPACE` in the current shell (via eval, same as `ctx`)
 
 3. Changes are **completely isolated** — switching context in one terminal doesn't affect any other terminal.
+
+> **Note:** Without `yaks init` sourced, `yaks ctx` falls back to spawning a sub-shell. The eval-based approach is recommended as it avoids shell nesting.
 
 ## Environment variables
 
@@ -228,7 +245,8 @@ Simply type `exit` or press `Ctrl+D` to return to the previous shell.
 | `YAKS_ACTIVE` | Set to `1` when inside a yaks-managed shell; unset otherwise |
 | `YAKS_CONTEXT` | Name of the active Kubernetes context |
 | `YAKS_NAMESPACE` | Name of the active namespace |
-| `YAKS_DEPTH` | Nesting depth of yaks shells (`1` for the first, `2` if you `yaks ctx` again inside, etc.) |\n| `YAKS_KUBECONFIG` | Original `KUBECONFIG` path(s) preserved for nested context switching |
+| `YAKS_TMPDIR` | Path to the temporary directory holding the isolated kubeconfig for this session |
+| `YAKS_KUBECONFIG` | Original `KUBECONFIG` path(s) preserved for context switching |
 
 ### User-configurable
 
@@ -255,7 +273,7 @@ yaks/
 │   └── completion.go         # Shell completion generation
 ├── pkg/
 │   ├── kubeconfig/           # Kubeconfig parsing, loading, merging, saving
-│   ├── shell/                # Sub-shell spawning with isolated config
+│   ├── shell/                # Shell integration & isolated kubeconfig setup
 │   ├── hooks/                # Pre/post/exit hook config and execution
 │   ├── state/                # Environment-based state management
 │   ├── prompt/               # Shell prompt integration scripts

@@ -503,3 +503,161 @@ func TestExecCommand_EnvIsolation(t *testing.T) {
 		t.Error("environment isolation checks failed — expected YAKS vars to be set correctly")
 	}
 }
+
+func TestEnvScript_Fish(t *testing.T) {
+	got := EnvScript("fish", "/tmp/yaks-123", "/tmp/yaks-123/config", "/home/user/.kube/config", "prod", "default")
+	if !strings.Contains(got, "set -gx KUBECONFIG") {
+		t.Error("fish EnvScript missing KUBECONFIG")
+	}
+	if !strings.Contains(got, "set -gx YAKS_CONTEXT") {
+		t.Error("fish EnvScript missing YAKS_CONTEXT")
+	}
+	if !strings.Contains(got, "set -gx YAKS_NAMESPACE") {
+		t.Error("fish EnvScript missing YAKS_NAMESPACE")
+	}
+	if !strings.Contains(got, "set -gx YAKS_ACTIVE 1") {
+		t.Error("fish EnvScript missing YAKS_ACTIVE")
+	}
+	if !strings.Contains(got, "set -gx YAKS_TMPDIR") {
+		t.Error("fish EnvScript missing YAKS_TMPDIR")
+	}
+	if !strings.Contains(got, "set -gx YAKS_KUBECONFIG") {
+		t.Error("fish EnvScript missing YAKS_KUBECONFIG")
+	}
+}
+
+func TestEnvScript_Bash(t *testing.T) {
+	got := EnvScript("bash", "/tmp/yaks-123", "/tmp/yaks-123/config", "/home/user/.kube/config", "prod", "kube-system")
+	if !strings.Contains(got, "export KUBECONFIG=") {
+		t.Error("bash EnvScript missing KUBECONFIG")
+	}
+	if !strings.Contains(got, "export YAKS_CONTEXT=") {
+		t.Error("bash EnvScript missing YAKS_CONTEXT")
+	}
+	if !strings.Contains(got, "export YAKS_ACTIVE=1") {
+		t.Error("bash EnvScript missing YAKS_ACTIVE")
+	}
+	if !strings.Contains(got, "export YAKS_TMPDIR=") {
+		t.Error("bash EnvScript missing YAKS_TMPDIR")
+	}
+}
+
+func TestEnvScript_Zsh(t *testing.T) {
+	got := EnvScript("zsh", "/tmp/yaks-123", "/tmp/yaks-123/config", "/home/user/.kube/config", "staging", "monitoring")
+	if !strings.Contains(got, "export KUBECONFIG=") {
+		t.Error("zsh EnvScript missing KUBECONFIG")
+	}
+	if !strings.Contains(got, "'staging'") {
+		t.Error("zsh EnvScript missing quoted context name")
+	}
+}
+
+func TestEnvScript_PowerShell(t *testing.T) {
+	got := EnvScript("powershell", "/tmp/yaks-123", "/tmp/yaks-123/config", "/home/.kube/config", "ctx", "ns")
+	if !strings.Contains(got, "$env:KUBECONFIG") {
+		t.Error("powershell EnvScript missing KUBECONFIG")
+	}
+	if !strings.Contains(got, "$env:YAKS_CONTEXT") {
+		t.Error("powershell EnvScript missing YAKS_CONTEXT")
+	}
+	if !strings.Contains(got, "$env:YAKS_ACTIVE = '1'") {
+		t.Error("powershell EnvScript missing YAKS_ACTIVE")
+	}
+	if !strings.Contains(got, "$env:YAKS_TMPDIR") {
+		t.Error("powershell EnvScript missing YAKS_TMPDIR")
+	}
+}
+
+func TestEnvScript_Unsupported(t *testing.T) {
+	got := EnvScript("tcsh", "/tmp", "/tmp/config", "/home/.kube/config", "ctx", "ns")
+	if got != "" {
+		t.Errorf("EnvScript(tcsh) = %q, want empty", got)
+	}
+}
+
+func TestNsEnvScript_Fish(t *testing.T) {
+	got := NsEnvScript("fish", "kube-system")
+	if !strings.Contains(got, "set -gx YAKS_NAMESPACE") {
+		t.Error("fish NsEnvScript missing YAKS_NAMESPACE")
+	}
+	if !strings.Contains(got, "'kube-system'") {
+		t.Error("fish NsEnvScript missing quoted namespace")
+	}
+}
+
+func TestNsEnvScript_Bash(t *testing.T) {
+	got := NsEnvScript("bash", "monitoring")
+	if !strings.Contains(got, "export YAKS_NAMESPACE=") {
+		t.Error("bash NsEnvScript missing YAKS_NAMESPACE")
+	}
+}
+
+func TestNsEnvScript_PowerShell(t *testing.T) {
+	got := NsEnvScript("powershell", "kube-system")
+	if !strings.Contains(got, "$env:YAKS_NAMESPACE") {
+		t.Error("powershell NsEnvScript missing YAKS_NAMESPACE")
+	}
+}
+
+func TestPsQuote(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"simple", "'simple'"},
+		{"with spaces", "'with spaces'"},
+		{"it's", "'it''s'"},
+		{"", "''"},
+	}
+	for _, tt := range tests {
+		got := psQuote(tt.input)
+		if got != tt.want {
+			t.Errorf("psQuote(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestShellQuote(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"simple", "'simple'"},
+		{"with spaces", "'with spaces'"},
+		{"it's", "'it'\\''s'"},
+		{"", "''"},
+	}
+	for _, tt := range tests {
+		got := shellQuote(tt.input)
+		if got != tt.want {
+			t.Errorf("shellQuote(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestOriginalKubeconfig_Default(t *testing.T) {
+	t.Setenv("YAKS_KUBECONFIG", "")
+	t.Setenv("KUBECONFIG", "")
+	got := OriginalKubeconfig()
+	if got == "" {
+		t.Error("OriginalKubeconfig() returned empty, want default path")
+	}
+}
+
+func TestOriginalKubeconfig_YaksKubeconfig(t *testing.T) {
+	t.Setenv("YAKS_KUBECONFIG", "/original/config")
+	t.Setenv("KUBECONFIG", "/isolated/config")
+	got := OriginalKubeconfig()
+	if got != "/original/config" {
+		t.Errorf("OriginalKubeconfig() = %q, want %q", got, "/original/config")
+	}
+}
+
+func TestOriginalKubeconfig_Kubeconfig(t *testing.T) {
+	t.Setenv("YAKS_KUBECONFIG", "")
+	t.Setenv("KUBECONFIG", "/my/kubeconfig")
+	got := OriginalKubeconfig()
+	if got != "/my/kubeconfig" {
+		t.Errorf("OriginalKubeconfig() = %q, want %q", got, "/my/kubeconfig")
+	}
+}
