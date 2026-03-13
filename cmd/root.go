@@ -36,6 +36,7 @@ func Execute() error {
 }
 
 func init() {
+	rootCmd.AddCommand(activateCmd)
 	rootCmd.AddCommand(ctxCmd)
 	rootCmd.AddCommand(nsCmd)
 	rootCmd.AddCommand(execCmd)

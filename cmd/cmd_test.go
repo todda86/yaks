@@ -126,7 +126,7 @@ func TestCompletionCommand_Powershell(t *testing.T) {
 }
 
 func TestSubcommands_Registered(t *testing.T) {
-	expected := []string{"ctx", "ns", "exec", "info", "init", "list", "version", "completion"}
+	expected := []string{"activate", "ctx", "ns", "exec", "info", "init", "list", "version", "completion"}
 	cmdNames := make(map[string]bool)
 	for _, sub := range rootCmd.Commands() {
 		cmdNames[sub.Name()] = true
@@ -202,6 +202,50 @@ func TestNsCommand_HasShellEvalFlag(t *testing.T) {
 	}
 	if flag.DefValue != "" {
 		t.Errorf("shell-eval flag default = %q, want empty", flag.DefValue)
+	}
+}
+
+func TestActivateCommand_RequiresShellEval(t *testing.T) {
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"activate"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("activate without --shell-eval expected error, got nil")
+	}
+}
+
+func TestActivateCommand_HasShellEvalFlag(t *testing.T) {
+	flag := activateCmd.Flags().Lookup("shell-eval")
+	if flag == nil {
+		t.Fatal("activate command missing --shell-eval flag")
+	}
+}
+
+func TestActivateCommand_HasNamespaceFlag(t *testing.T) {
+	flag := activateCmd.Flags().Lookup("namespace")
+	if flag == nil {
+		t.Fatal("activate command missing --namespace flag")
+	}
+	if flag.Shorthand != "n" {
+		t.Errorf("namespace flag shorthand = %q, want %q", flag.Shorthand, "n")
+	}
+}
+
+func TestActivateCommand_NoArgs(t *testing.T) {
+	if activateCmd.Args != nil {
+		// cobra.NoArgs returns an error for any args
+		buf := new(bytes.Buffer)
+		rootCmd.SetOut(buf)
+		rootCmd.SetErr(buf)
+		rootCmd.SetArgs([]string{"activate", "extra-arg", "--shell-eval", "bash"})
+
+		err := rootCmd.Execute()
+		if err == nil {
+			t.Fatal("activate with extra args expected error, got nil")
+		}
 	}
 }
 
