@@ -14,6 +14,7 @@ func TestPromptSegment_Inactive(t *testing.T) {
 
 func TestPromptSegment_Active(t *testing.T) {
 	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_NO_PROMPT", "")
 	t.Setenv("YAKS_CONTEXT", "prod")
 	t.Setenv("YAKS_NAMESPACE", "monitoring")
 
@@ -26,6 +27,7 @@ func TestPromptSegment_Active(t *testing.T) {
 
 func TestPromptSegment_DefaultNamespace(t *testing.T) {
 	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_NO_PROMPT", "")
 	t.Setenv("YAKS_CONTEXT", "dev")
 	t.Setenv("YAKS_NAMESPACE", "")
 
@@ -74,6 +76,7 @@ func TestPromptSegmentColored_Inactive(t *testing.T) {
 
 func TestPromptSegmentColored_Active(t *testing.T) {
 	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_NO_PROMPT", "")
 	t.Setenv("YAKS_CONTEXT", "prod")
 	t.Setenv("YAKS_NAMESPACE", "kube-system")
 
@@ -95,6 +98,7 @@ func TestZshPrompt_Inactive(t *testing.T) {
 
 func TestZshPrompt_Active(t *testing.T) {
 	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_NO_PROMPT", "")
 	t.Setenv("YAKS_CONTEXT", "staging")
 	t.Setenv("YAKS_NAMESPACE", "apps")
 
@@ -116,6 +120,7 @@ func TestBashPrompt_Inactive(t *testing.T) {
 
 func TestBashPrompt_Active(t *testing.T) {
 	t.Setenv("YAKS_ACTIVE", "1")
+	t.Setenv("YAKS_NO_PROMPT", "")
 	t.Setenv("YAKS_CONTEXT", "prod")
 	t.Setenv("YAKS_NAMESPACE", "default")
 
@@ -213,6 +218,21 @@ func TestShellInit_PowerShell(t *testing.T) {
 	if !strings.Contains(got, "function prompt") {
 		t.Error("ShellInit(powershell) missing prompt function")
 	}
+	if !strings.Contains(got, "Register-ArgumentCompleter -Native") {
+		t.Error("ShellInit(powershell) missing Register-ArgumentCompleter -Native for tab completion")
+	}
+	if !strings.Contains(got, "__complete") {
+		t.Error("ShellInit(powershell) missing __complete call for tab completion")
+	}
+	if !strings.Contains(got, "[char]9") {
+		t.Error("ShellInit(powershell) should use [char]9 for tab splitting")
+	}
+	if !strings.Contains(got, "function ktx") {
+		t.Error("ShellInit(powershell) missing ktx wrapper function")
+	}
+	if !strings.Contains(got, "function kns") {
+		t.Error("ShellInit(powershell) missing kns wrapper function")
+	}
 }
 
 func TestPowerShellModuleManifest(t *testing.T) {
@@ -293,9 +313,17 @@ func TestPowerShellModuleScript(t *testing.T) {
 		t.Error("module script missing Export-ModuleMember")
 	}
 
-	// Should register argument completers
-	if !strings.Contains(got, "Register-ArgumentCompleter") {
-		t.Error("module script missing Register-ArgumentCompleter")
+	// Should register argument completers via Register-ArgumentCompleter -Native
+	if !strings.Contains(got, "Register-ArgumentCompleter -Native") {
+		t.Error("module script missing Register-ArgumentCompleter -Native")
+	}
+
+	// Should use [char]9 for tab splitting (avoids Go raw string backtick conflict)
+	if !strings.Contains(got, "[char]9") {
+		t.Error("module script should use [char]9 for tab splitting")
+	}
+	if strings.Contains(got, "Substring(4)") {
+		t.Error("module script should NOT use Substring(4)")
 	}
 
 	// Should handle YAKS_TMPDIR cleanup

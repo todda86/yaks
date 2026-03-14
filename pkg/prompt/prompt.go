@@ -141,15 +141,15 @@ PROMPT_COMMAND="__yaks_prompt_command${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 yaks() {
     case "${1:-}" in
         ctx|context)
-            if [ -n "${YAKS_TMPDIR:-}" ]; then
-                rm -rf "$YAKS_TMPDIR" 2>/dev/null
-                unset YAKS_TMPDIR
-            fi
+            local _yaks_old_tmpdir="${YAKS_TMPDIR:-}"
             local _yaks_eval
             _yaks_eval=$(command yaks ctx --shell-eval bash "${@:2}")
             local _yaks_status=$?
             if [ $_yaks_status -eq 0 ] && [ -n "$_yaks_eval" ]; then
                 eval "$_yaks_eval"
+                if [ -n "$_yaks_old_tmpdir" ] && [ "$_yaks_old_tmpdir" != "${YAKS_TMPDIR:-}" ]; then
+                    rm -rf "$_yaks_old_tmpdir" 2>/dev/null
+                fi
             fi
             return $_yaks_status
             ;;
@@ -190,15 +190,15 @@ __yaks_update_prompt() {
 yaks() {
     case "${1:-}" in
         ctx|context)
-            if [[ -n "${YAKS_TMPDIR:-}" ]]; then
-                rm -rf "$YAKS_TMPDIR" 2>/dev/null
-                unset YAKS_TMPDIR
-            fi
+            local _yaks_old_tmpdir="${YAKS_TMPDIR:-}"
             local _yaks_eval
             _yaks_eval=$(command yaks ctx --shell-eval zsh "${@:2}")
             local _yaks_status=$?
             if (( _yaks_status == 0 )) && [[ -n "$_yaks_eval" ]]; then
                 eval "$_yaks_eval"
+                if [[ -n "$_yaks_old_tmpdir" ]] && [[ "$_yaks_old_tmpdir" != "${YAKS_TMPDIR:-}" ]]; then
+                    rm -rf "$_yaks_old_tmpdir" 2>/dev/null
+                fi
             fi
             return $_yaks_status
             ;;
@@ -252,12 +252,13 @@ function yaks --wraps=yaks --description 'yaks context/namespace switcher'
     if test (count $argv) -ge 1
         switch $argv[1]
             case ctx context
-                if set -q YAKS_TMPDIR
-                    command rm -rf $YAKS_TMPDIR 2>/dev/null
-                    set -e YAKS_TMPDIR
-                end
+                set -l _yaks_old_tmpdir $YAKS_TMPDIR
                 command yaks ctx --shell-eval fish $argv[2..] | source
-                return $pipestatus[1]
+                set -l _yaks_status $pipestatus[1]
+                if test $_yaks_status -eq 0 -a -n "$_yaks_old_tmpdir" -a "$_yaks_old_tmpdir" != "$YAKS_TMPDIR"
+                    command rm -rf $_yaks_old_tmpdir 2>/dev/null
+                end
+                return $_yaks_status
             case ns namespace
                 command yaks ns --shell-eval fish $argv[2..] | source
                 return $pipestatus[1]
@@ -271,7 +272,87 @@ end
 `
 }
 
+// psCompleterBlock returns the PowerShell completer scriptblock and
+// Register-ArgumentCompleter calls. Shared by inline init and module.
+// Uses [char]96 for backtick and [char]9 for tab to avoid Go raw string conflicts.
+func psCompleterBlock() string {
+	return `
+# ---------------------------------------------------------------------------
+# Tab completion — Register-ArgumentCompleter -Native works for both
+# native commands AND functions, fires for every positional argument,
+# and runs in caller scope (avoids module scope isolation issues).
+# Follows Cobra's proven PowerShell completion pattern.
+# ---------------------------------------------------------------------------
+filter __yaks_escapeStringWithSpecialChars {
+    $bt = [char]96
+    $_ -replace ('\s|#|@|\$|;|,|''|\{|\}|\(|\)|"|' + $bt + '|\||<|>|&'), ($bt + '$&')
+}
+
+$__yaksCompleterBlock = {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    $yaksBin = (Get-Command yaks -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+    if (-not $yaksBin) { return }
+
+    # Map alias commands to their yaks subcommand
+    $cmdName = $commandAst.CommandElements[0].ToString()
+    $completeArgs = @()
+    switch ($cmdName) {
+        'ktx' { $completeArgs += 'ctx' }
+        'kns' { $completeArgs += 'ns' }
+    }
+    for ($i = 1; $i -lt $commandAst.CommandElements.Count; $i++) {
+        $completeArgs += $commandAst.CommandElements[$i].ToString()
+    }
+    if ($wordToComplete -eq '') { $completeArgs += '' }
+
+    # Call __complete and collect all output
+    $out = @(& $yaksBin __complete @completeArgs 2>$null)
+    if ($out.Count -eq 0) { return }
+
+    # Directive is the last line (e.g. ":4")
+    [int]$directive = 0
+    if ($out[-1] -match '^:(\d+)$') { $directive = [int]$Matches[1] }
+    $out = $out | Where-Object { $_ -notmatch '^:' }
+
+    # ShellCompDirectiveError - abort
+    if (($directive -band 1) -ne 0) { return }
+
+    # Parse completions into name/description pairs
+    [Array]$values = $out | ForEach-Object {
+        $n, $d = $_ -split ([char]9), 2
+        if (-not $d) { $d = ' ' }
+        [PSCustomObject]@{ Name = $n; Description = $d }
+    }
+
+    # Trailing space unless NoSpace directive
+    $space = ' '
+    if (($directive -band 2) -ne 0) { $space = '' }
+
+    # Filter by word being completed
+    $values = $values | Where-Object { $_.Name -like "$wordToComplete*" }
+
+    # NoFileComp: emit empty string to suppress path completion when no results
+    if (($directive -band 4) -ne 0 -and $values.Length -eq 0) {
+        ''
+        return
+    }
+
+    # Emit CompletionResult objects — escaped name + trailing space works
+    # correctly across all PSReadLine modes (Complete, MenuComplete, TabCompleteNext)
+    $values | ForEach-Object {
+        $ct = ($_.Name | __yaks_escapeStringWithSpecialChars) + $space
+        [System.Management.Automation.CompletionResult]::new($ct, $_.Name, 'ParameterValue', $_.Description)
+    }
+}
+Register-ArgumentCompleter -Native -CommandName 'yaks' -ScriptBlock $__yaksCompleterBlock
+Register-ArgumentCompleter -Native -CommandName 'ktx'  -ScriptBlock $__yaksCompleterBlock
+Register-ArgumentCompleter -Native -CommandName 'kns'  -ScriptBlock $__yaksCompleterBlock
+`
+}
+
 func powershellInit() string {
+	// Simple wrapper functions + Register-ArgumentCompleter -Native for completion.
+	// -Native completers run in the caller's scope and work for all positional args.
 	return `# yaks shell integration for PowerShell
 # Add this to your $PROFILE:
 #   yaks init powershell | Out-String | Invoke-Expression
@@ -295,15 +376,15 @@ function yaks {
     if ($args.Count -ge 1) {
         switch ($args[0]) {
             { $_ -in 'ctx','context' } {
-                if ($env:YAKS_TMPDIR) {
-                    Remove-Item -Recurse -Force $env:YAKS_TMPDIR -ErrorAction SilentlyContinue
-                    Remove-Item Env:\YAKS_TMPDIR -ErrorAction SilentlyContinue
-                }
+                $oldTmpDir = $env:YAKS_TMPDIR
                 $remaining = @($args | Select-Object -Skip 1)
                 $output = & (Get-Command yaks -CommandType Application | Select-Object -First 1) ctx --shell-eval powershell @remaining
                 $exitCode = $LASTEXITCODE
                 if ($exitCode -eq 0 -and $output) {
                     $output | Out-String | Invoke-Expression
+                    if ($oldTmpDir -and $oldTmpDir -ne $env:YAKS_TMPDIR) {
+                        Remove-Item -Recurse -Force $oldTmpDir -ErrorAction SilentlyContinue
+                    }
                 }
                 return
             }
@@ -320,7 +401,10 @@ function yaks {
     }
     & (Get-Command yaks -CommandType Application | Select-Object -First 1) @args
 }
-`
+
+function ktx { yaks ctx @args }
+function kns { yaks ns @args }
+` + psCompleterBlock()
 }
 
 // PowerShellModuleManifest returns the content of a YaksInit.psd1 module manifest.
@@ -347,15 +431,10 @@ func PowerShellModuleManifest() string {
 }
 
 // PowerShellModuleScript returns the content of a YaksInit.psm1 module script.
-// This is the same wrapper logic as powershellInit() but structured as a module
-// so that FunctionsToExport makes the functions visible in all scopes.
+// Uses Register-ArgumentCompleter -Native for reliable tab completion that
+// works across all positional args and avoids module scope issues.
+// Uses [char]9 (tab) instead of backtick-t so everything fits in Go raw strings.
 func PowerShellModuleScript() string {
-	// We split this into parts because PowerShell uses backtick as an escape
-	// character (e.g. "`t" for tab), which conflicts with Go raw string literals.
-	return psModulePart1() + psModuleCompleterBlock() + psModulePart2()
-}
-
-func psModulePart1() string {
 	return `#
 # YaksInit.psm1 — yaks shell integration module
 # Generated by: yaks init powershell --module
@@ -390,35 +469,29 @@ function prompt {
 # Shell wrapper: intercepts ctx/ns to eval env changes in the current shell
 # ---------------------------------------------------------------------------
 function yaks {
-    [CmdletBinding()]
-    param(
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]]$Arguments
-    )
-
     $yaksBin = (Get-Command yaks -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
     if (-not $yaksBin) {
         Write-Error "yaks binary not found in PATH"
         return
     }
 
-    if ($Arguments.Count -ge 1) {
-        switch ($Arguments[0]) {
+    if ($args.Count -ge 1) {
+        switch ($args[0]) {
             { $_ -in 'ctx','context' } {
-                if ($env:YAKS_TMPDIR) {
-                    Remove-Item -Recurse -Force $env:YAKS_TMPDIR -ErrorAction SilentlyContinue
-                    Remove-Item Env:\YAKS_TMPDIR -ErrorAction SilentlyContinue
-                }
-                $remaining = @($Arguments | Select-Object -Skip 1)
+                $oldTmpDir = $env:YAKS_TMPDIR
+                $remaining = @($args | Select-Object -Skip 1)
                 $output = & $yaksBin ctx --shell-eval powershell @remaining
                 $exitCode = $LASTEXITCODE
                 if ($exitCode -eq 0 -and $output) {
                     $output | Out-String | Invoke-Expression
+                    if ($oldTmpDir -and $oldTmpDir -ne $env:YAKS_TMPDIR) {
+                        Remove-Item -Recurse -Force $oldTmpDir -ErrorAction SilentlyContinue
+                    }
                 }
                 return
             }
             { $_ -in 'ns','namespace' } {
-                $remaining = @($Arguments | Select-Object -Skip 1)
+                $remaining = @($args | Select-Object -Skip 1)
                 $output = & $yaksBin ns --shell-eval powershell @remaining
                 $exitCode = $LASTEXITCODE
                 if ($exitCode -eq 0 -and $output) {
@@ -428,48 +501,15 @@ function yaks {
             }
         }
     }
-    & $yaksBin @Arguments
+    & $yaksBin @args
 }
 
 # ---------------------------------------------------------------------------
 # Convenience wrappers: ktx = yaks ctx, kns = yaks ns
 # ---------------------------------------------------------------------------
-function ktx {
-    yaks ctx @args
-}
-
-function kns {
-    yaks ns @args
-}
-
-# ---------------------------------------------------------------------------
-# Tab completion — register for the wrapper function
-# ---------------------------------------------------------------------------
-$__yaksCompleterBlock = {
-    param($wordToComplete, $commandAst, $cursorPosition)
-    $yaksBin = (Get-Command yaks -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
-    if ($yaksBin) {
-`
-}
-
-func psModuleCompleterBlock() string {
-	// This line uses PowerShell's backtick-t for tab character, which can't go
-	// inside a Go raw string literal (backtick terminates the raw string).
-	return "        & $yaksBin __complete $commandAst.ToString().Substring(4) 2>$null | ForEach-Object {\n" +
-		"            $parts = $_ -split \"`t\", 2\n" +
-		"            $name = $parts[0]\n" +
-		"            $desc = if ($parts.Count -gt 1) { $parts[1] } else { '' }\n" +
-		"            [System.Management.Automation.CompletionResult]::new($name, $name, 'ParameterValue', $desc)\n" +
-		"        }\n"
-}
-
-func psModulePart2() string {
-	return `    }
-}
-Register-ArgumentCompleter -CommandName yaks -ScriptBlock $__yaksCompleterBlock
-Register-ArgumentCompleter -CommandName ktx  -ScriptBlock $__yaksCompleterBlock
-Register-ArgumentCompleter -CommandName kns  -ScriptBlock $__yaksCompleterBlock
-
+function ktx { yaks ctx @args }
+function kns { yaks ns @args }
+` + psCompleterBlock() + `
 Export-ModuleMember -Function yaks, prompt, ktx, kns
 `
 }

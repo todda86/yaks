@@ -8,6 +8,7 @@ import (
 )
 
 var version = "dev"
+var commit = "unknown"
 
 var rootCmd = &cobra.Command{
 	Use:   "yaks",

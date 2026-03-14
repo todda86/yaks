@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -49,9 +50,15 @@ the context name, namespace, cluster server, and yaks shell depth.`,
 		}
 
 		fmt.Println()
-		white.Println("+-----------------------------------------+")
-		white.Println("|           yaks status                |")
-		white.Println("+-----------------------------------------+")
+		versionStr := fmt.Sprintf("yaks %s (%s)", version, commit)
+		width := len(versionStr) + 4 // 2 padding each side
+		if width < 41 {
+			width = 41
+		}
+		border := "+" + strings.Repeat("-", width) + "+"
+		white.Println(border)
+		white.Printf("| %-*s |\n", width-2, versionStr)
+		white.Println(border)
 
 		fmt.Printf("  Context:   ")
 		cyan.Println(contextName)
