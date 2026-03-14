@@ -214,3 +214,92 @@ func TestShellInit_PowerShell(t *testing.T) {
 		t.Error("ShellInit(powershell) missing prompt function")
 	}
 }
+
+func TestPowerShellModuleManifest(t *testing.T) {
+	got := PowerShellModuleManifest()
+	if got == "" {
+		t.Fatal("PowerShellModuleManifest() returned empty string")
+	}
+	if !strings.Contains(got, "RootModule") {
+		t.Error("manifest missing RootModule")
+	}
+	if !strings.Contains(got, "YaksInit.psm1") {
+		t.Error("manifest missing reference to YaksInit.psm1")
+	}
+	if !strings.Contains(got, "FunctionsToExport") {
+		t.Error("manifest missing FunctionsToExport")
+	}
+	if !strings.Contains(got, "'yaks'") {
+		t.Error("manifest missing 'yaks' in FunctionsToExport")
+	}
+	if !strings.Contains(got, "'prompt'") {
+		t.Error("manifest missing 'prompt' in FunctionsToExport")
+	}
+	if !strings.Contains(got, "AliasesToExport") {
+		t.Error("manifest missing AliasesToExport")
+	}
+	if !strings.Contains(got, "'ktx'") {
+		t.Error("manifest missing 'ktx' in FunctionsToExport")
+	}
+	if !strings.Contains(got, "'kns'") {
+		t.Error("manifest missing 'kns' in FunctionsToExport")
+	}
+	if !strings.Contains(got, "ModuleVersion") {
+		t.Error("manifest missing ModuleVersion")
+	}
+}
+
+func TestPowerShellModuleScript(t *testing.T) {
+	got := PowerShellModuleScript()
+	if got == "" {
+		t.Fatal("PowerShellModuleScript() returned empty string")
+	}
+
+	// Should have the prompt function
+	if !strings.Contains(got, "function prompt") {
+		t.Error("module script missing prompt function")
+	}
+
+	// Should have the yaks wrapper function
+	if !strings.Contains(got, "function yaks") {
+		t.Error("module script missing yaks wrapper function")
+	}
+
+	// Should reference --shell-eval powershell
+	if !strings.Contains(got, "--shell-eval powershell") {
+		t.Error("module script missing --shell-eval powershell")
+	}
+
+	// Should have Invoke-Expression for eval
+	if !strings.Contains(got, "Invoke-Expression") {
+		t.Error("module script missing Invoke-Expression")
+	}
+
+	// Should have YAKS_ACTIVE check
+	if !strings.Contains(got, "$env:YAKS_ACTIVE") {
+		t.Error("module script missing YAKS_ACTIVE check")
+	}
+
+	// Should define ktx/kns wrapper functions
+	if !strings.Contains(got, "function ktx") {
+		t.Error("module script missing ktx wrapper function")
+	}
+	if !strings.Contains(got, "function kns") {
+		t.Error("module script missing kns wrapper function")
+	}
+
+	// Should have Export-ModuleMember
+	if !strings.Contains(got, "Export-ModuleMember") {
+		t.Error("module script missing Export-ModuleMember")
+	}
+
+	// Should register argument completers
+	if !strings.Contains(got, "Register-ArgumentCompleter") {
+		t.Error("module script missing Register-ArgumentCompleter")
+	}
+
+	// Should handle YAKS_TMPDIR cleanup
+	if !strings.Contains(got, "YAKS_TMPDIR") {
+		t.Error("module script missing YAKS_TMPDIR cleanup")
+	}
+}

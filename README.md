@@ -45,6 +45,30 @@ make cross-compile
 
 ## Usage
 
+### Activate a session
+
+The `activate` command reads the current context from your kubeconfig and sets up an isolated yaks session in your current shell — no need to know or pass the context name, and no dependency on `kubectl`:
+
+```bash
+# Bash / Zsh
+eval "$(yaks activate --shell-eval bash)"
+eval "$(yaks activate --shell-eval zsh)"
+
+# Fish
+yaks activate --shell-eval fish | source
+
+# PowerShell
+yaks activate --shell-eval powershell | Out-String | Invoke-Expression
+```
+
+Optionally override the namespace:
+
+```bash
+eval "$(yaks activate --shell-eval bash -n kube-system)"
+```
+
+This is the recommended way to bootstrap a yaks session at shell startup — add it to your shell RC file alongside `yaks init` (see [Shell prompt integration](#shell-prompt-integration) below).
+
 ### Switch context
 
 ```bash
@@ -104,27 +128,33 @@ yaks list namespaces
 
 ### Shell prompt integration
 
-Add yaks context info to your shell prompt:
+Add yaks context info to your shell prompt and optionally activate a session at startup:
 
 **Bash** (`~/.bashrc`):
 ```bash
 eval "$(yaks init bash)"
+eval "$(yaks activate --shell-eval bash)"   # optional: auto-activate current context
 ```
 
 **Zsh** (`~/.zshrc`):
 ```bash
 eval "$(yaks init zsh)"
+eval "$(yaks activate --shell-eval zsh)"    # optional: auto-activate current context
 ```
 
 **Fish** (`~/.config/fish/config.fish`):
 ```fish
 yaks init fish | source
+yaks activate --shell-eval fish | source    # optional: auto-activate current context
 ```
 
 **PowerShell** (`$PROFILE`):
 ```powershell
 yaks init powershell | Out-String | Invoke-Expression
+yaks activate --shell-eval powershell | Out-String | Invoke-Expression  # optional
 ```
+
+> **Tip:** `yaks activate` reads the current context directly from your kubeconfig — no `kubectl` dependency. Previously this required: `eval "$(yaks ctx $(kubectl config current-context) --shell-eval bash)"`. The activate command replaces that pattern entirely.
 
 ### Shell completions
 
@@ -218,7 +248,15 @@ Now every time you enter a prod context, your terminal goes red. When you `exit`
 
 ## How it works
 
-1. When you run `yaks ctx <context>` (with shell init sourced):
+1. When you run `yaks activate --shell-eval <shell>` (typically in your shell RC):
+   - yaks reads the current context from the merged kubeconfig
+   - Creates a **temporary kubeconfig** with only that context
+   - Outputs shell-specific `export`/`set` commands to stdout
+   - Your shell **evals** the output, setting env vars in the current session
+   - Runs any matching pre/post hooks
+   - No `kubectl` dependency — all context discovery is done internally
+
+2. When you run `yaks ctx <context>` (with shell init sourced):
    - The shell wrapper function calls `yaks ctx --shell-eval <shell> <context>`
    - yaks loads and merges all kubeconfig files from `KUBECONFIG`
    - Creates a **temporary kubeconfig** with only the selected context
@@ -226,12 +264,12 @@ Now every time you enter a prod context, your terminal goes red. When you `exit`
    - The wrapper function **evals** the output, setting env vars in your current shell — no sub-shell spawned
    - Runs any matching pre/post hooks
 
-2. When you run `yaks ns <namespace>`:
+3. When you run `yaks ns <namespace>`:
    - Validates the namespace exists in the cluster (via `kubectl`)
    - Updates the namespace in the current kubeconfig
    - Sets `YAKS_NAMESPACE` in the current shell (via eval, same as `ctx`)
 
-3. Changes are **completely isolated** — switching context in one terminal doesn't affect any other terminal.
+4. Changes are **completely isolated** — switching context in one terminal doesn't affect any other terminal.
 
 > **Note:** Without `yaks init` sourced, `yaks ctx` falls back to spawning a sub-shell. The eval-based approach is recommended as it avoids shell nesting.
 
@@ -264,6 +302,7 @@ yaks/
 ├── main.go                    # Entry point
 ├── cmd/                       # CLI commands (cobra)
 │   ├── root.go               # Root command & subcommand registration
+│   ├── activate.go           # Activate session from current kubeconfig context
 │   ├── ctx.go                # Context switching command
 │   ├── ns.go                 # Namespace switching command
 │   ├── info.go               # Status/info display

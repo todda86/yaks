@@ -22,6 +22,7 @@ the context name, namespace, cluster server, and yaks shell depth.`,
 		white := color.New(color.Bold)
 		dim := color.New(color.Faint)
 
+		// Load the current (possibly isolated) kubeconfig for context details
 		kubeconfigPath := os.Getenv("KUBECONFIG")
 		if kubeconfigPath == "" {
 			kubeconfigPath = kubeconfig.DefaultKubeconfigPath()
@@ -81,15 +82,23 @@ the context name, namespace, cluster server, and yaks shell depth.`,
 			dim.Println("not in yaks shell")
 		}
 
+		// Load all contexts (from YAKS_KUBECONFIG if inside a yaks session)
+		// so the "Available contexts" list shows everything, not just the
+		// isolated single-context temp file.
+		allCfg, _, allErr := kubeconfig.LoadAll()
+		if allErr != nil {
+			allCfg = cfg // fall back to current config
+		}
+
 		fmt.Println()
 		white.Println("  Available contexts:")
-		for _, c := range cfg.ListContextNames() {
+		for _, c := range allCfg.ListContextNames() {
 			marker := "  "
 			if c == contextName {
 				marker = "> "
 			}
 			ns := ""
-			for _, nc := range cfg.Contexts {
+			for _, nc := range allCfg.Contexts {
 				if nc.Name == c && nc.Context.Namespace != "" {
 					ns = nc.Context.Namespace
 				}
