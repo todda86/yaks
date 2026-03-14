@@ -338,10 +338,10 @@ func PowerShellModuleManifest() string {
     Author            = 'yaks'
     Description       = 'Shell integration for yaks — Kubernetes context & namespace switcher'
     PowerShellVersion = '5.1'
-    FunctionsToExport = @('yaks', 'prompt')
+    FunctionsToExport = @('yaks', 'prompt', 'ktx', 'kns')
     CmdletsToExport   = @()
     VariablesToExport = @()
-    AliasesToExport   = @('ktx', 'kns')
+    AliasesToExport   = @()
 }
 `
 }
@@ -410,25 +410,19 @@ function yaks {
                     Remove-Item Env:\YAKS_TMPDIR -ErrorAction SilentlyContinue
                 }
                 $remaining = @($Arguments | Select-Object -Skip 1)
-                $output = & $yaksBin ctx --shell-eval powershell @remaining 2>&1
+                $output = & $yaksBin ctx --shell-eval powershell @remaining
                 $exitCode = $LASTEXITCODE
                 if ($exitCode -eq 0 -and $output) {
                     $output | Out-String | Invoke-Expression
-                } else {
-                    $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { Write-Error $_ }
-                    $output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Write-Host
                 }
                 return
             }
             { $_ -in 'ns','namespace' } {
                 $remaining = @($Arguments | Select-Object -Skip 1)
-                $output = & $yaksBin ns --shell-eval powershell @remaining 2>&1
+                $output = & $yaksBin ns --shell-eval powershell @remaining
                 $exitCode = $LASTEXITCODE
                 if ($exitCode -eq 0 -and $output) {
                     $output | Out-String | Invoke-Expression
-                } else {
-                    $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { Write-Error $_ }
-                    $output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Write-Host
                 }
                 return
             }
@@ -438,10 +432,15 @@ function yaks {
 }
 
 # ---------------------------------------------------------------------------
-# Aliases for convenience
+# Convenience wrappers: ktx = yaks ctx, kns = yaks ns
 # ---------------------------------------------------------------------------
-Set-Alias -Name ktx -Value yaks -Description 'Alias for yaks (context switching)'
-Set-Alias -Name kns -Value yaks -Description 'Alias for yaks (namespace switching)'
+function ktx {
+    yaks ctx @args
+}
+
+function kns {
+    yaks ns @args
+}
 
 # ---------------------------------------------------------------------------
 # Tab completion — register for the wrapper function
@@ -471,6 +470,6 @@ Register-ArgumentCompleter -CommandName yaks -ScriptBlock $__yaksCompleterBlock
 Register-ArgumentCompleter -CommandName ktx  -ScriptBlock $__yaksCompleterBlock
 Register-ArgumentCompleter -CommandName kns  -ScriptBlock $__yaksCompleterBlock
 
-Export-ModuleMember -Function yaks, prompt -Alias ktx, kns
+Export-ModuleMember -Function yaks, prompt, ktx, kns
 `
 }

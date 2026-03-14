@@ -239,10 +239,10 @@ func TestPowerShellModuleManifest(t *testing.T) {
 		t.Error("manifest missing AliasesToExport")
 	}
 	if !strings.Contains(got, "'ktx'") {
-		t.Error("manifest missing 'ktx' alias")
+		t.Error("manifest missing 'ktx' in FunctionsToExport")
 	}
 	if !strings.Contains(got, "'kns'") {
-		t.Error("manifest missing 'kns' alias")
+		t.Error("manifest missing 'kns' in FunctionsToExport")
 	}
 	if !strings.Contains(got, "ModuleVersion") {
 		t.Error("manifest missing ModuleVersion")
@@ -280,15 +280,12 @@ func TestPowerShellModuleScript(t *testing.T) {
 		t.Error("module script missing YAKS_ACTIVE check")
 	}
 
-	// Should define aliases
-	if !strings.Contains(got, "Set-Alias") {
-		t.Error("module script missing Set-Alias")
+	// Should define ktx/kns wrapper functions
+	if !strings.Contains(got, "function ktx") {
+		t.Error("module script missing ktx wrapper function")
 	}
-	if !strings.Contains(got, "ktx") {
-		t.Error("module script missing ktx alias")
-	}
-	if !strings.Contains(got, "kns") {
-		t.Error("module script missing kns alias")
+	if !strings.Contains(got, "function kns") {
+		t.Error("module script missing kns wrapper function")
 	}
 
 	// Should have Export-ModuleMember
