@@ -81,6 +81,43 @@ func TestInitCommand_Unsupported(t *testing.T) {
 	}
 }
 
+func TestInitCommand_HasModuleFlag(t *testing.T) {
+	flag := initShellCmd.Flags().Lookup("module")
+	if flag == nil {
+		t.Fatal("init command missing --module flag")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("module flag default = %q, want \"false\"", flag.DefValue)
+	}
+}
+
+func TestInitCommand_HasInstallFlag(t *testing.T) {
+	flag := initShellCmd.Flags().Lookup("install")
+	if flag == nil {
+		t.Fatal("init command missing --install flag")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("install flag default = %q, want \"false\"", flag.DefValue)
+	}
+}
+
+func TestInitCommand_ModuleOnlyForPowerShell(t *testing.T) {
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+
+	// Reset flag state
+	initModule = true
+	initInstall = false
+	defer func() { initModule = false }()
+
+	rootCmd.SetArgs([]string{"init", "bash", "--module"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("init bash --module expected error, got nil")
+	}
+}
+
 func TestCompletionCommand_Bash(t *testing.T) {
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
