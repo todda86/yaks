@@ -300,25 +300,19 @@ function yaks {
                     Remove-Item Env:\YAKS_TMPDIR -ErrorAction SilentlyContinue
                 }
                 $remaining = @($args | Select-Object -Skip 1)
-                $output = & (Get-Command yaks -CommandType Application | Select-Object -First 1) ctx --shell-eval powershell @remaining 2>&1
+                $output = & (Get-Command yaks -CommandType Application | Select-Object -First 1) ctx --shell-eval powershell @remaining
                 $exitCode = $LASTEXITCODE
                 if ($exitCode -eq 0 -and $output) {
                     $output | Out-String | Invoke-Expression
-                } else {
-                    $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { Write-Error $_ }
-                    $output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Write-Host
                 }
                 return
             }
             { $_ -in 'ns','namespace' } {
                 $remaining = @($args | Select-Object -Skip 1)
-                $output = & (Get-Command yaks -CommandType Application | Select-Object -First 1) ns --shell-eval powershell @remaining 2>&1
+                $output = & (Get-Command yaks -CommandType Application | Select-Object -First 1) ns --shell-eval powershell @remaining
                 $exitCode = $LASTEXITCODE
                 if ($exitCode -eq 0 -and $output) {
                     $output | Out-String | Invoke-Expression
-                } else {
-                    $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { Write-Error $_ }
-                    $output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Write-Host
                 }
                 return
             }
