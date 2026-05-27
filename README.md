@@ -101,14 +101,15 @@ yaks info
 Output:
 ```
 +-----------------------------------------+
-|             yaks status                 |
+| yaks v0.3.0 (abc1234)                   |
 +-----------------------------------------+
   Context:   production
   Namespace: default
   Cluster:   prod-cluster
   Server:    https://k8s.example.com:6443
   User:      admin
-  Shell:     active (depth: 1)
+  Shell:     active (depth: 0)
+  Config:    /tmp/yaks-1234567890/config
 
   Available contexts:
     > production (default)
@@ -125,6 +126,23 @@ yaks list contexts
 # List all namespaces in the current cluster
 yaks list namespaces
 ```
+
+### Run a command in a context
+
+The `exec` command runs a command in a specified context and namespace without modifying your current shell. The command runs with an isolated kubeconfig and inherits stdin/stdout/stderr:
+
+```bash
+# Run kubectl in a specific context/namespace
+yaks exec my-cluster default -- kubectl get pods
+
+# Use -n flag for namespace
+yaks exec prod -n kube-system -- helm list
+
+# Tail logs in another context without switching
+yaks exec staging -n monitoring -- kubectl logs -f deploy/prometheus
+```
+
+The process exits with the same exit code as the executed command.
 
 ### Shell prompt integration
 
@@ -148,15 +166,31 @@ yaks init fish | source
 yaks activate --shell-eval fish | source    # optional: auto-activate current context
 ```
 
-**PowerShell** (`$PROFILE`):
+**PowerShell — inline** (`$PROFILE`):
 ```powershell
 yaks init powershell | Out-String | Invoke-Expression
 yaks activate --shell-eval powershell | Out-String | Invoke-Expression  # optional
 ```
 
+**PowerShell — module** (recommended for faster shell startup):
+```powershell
+# One-time install — copies YaksInit module to your PowerShell Modules directory
+yaks init powershell --module --install
+
+# Then in your $PROFILE:
+Import-Module YaksInit
+yaks activate --shell-eval powershell | Out-String | Invoke-Expression  # optional
+```
+
+The module provides the same shell wrapper, prompt segment, tab completion, and convenience functions (`ktx`, `kns`) as the inline init, but loads faster because PowerShell can cache the module.
+
+To inspect the module files without installing, use `yaks init powershell --module` which prints the module manifest and script to stdout.
+
 > **Tip:** `yaks activate` reads the current context directly from your kubeconfig — no `kubectl` dependency. Previously this required: `eval "$(yaks ctx $(kubectl config current-context) --shell-eval bash)"`. The activate command replaces that pattern entirely.
 
 ### Shell completions
+
+> **Note:** If you source `yaks init` (see above), tab completion for `yaks` commands is already included — you don't need to set up completions separately. The commands below are for shells where you want completions without the full yaks init integration.
 
 ```bash
 # Bash
@@ -171,6 +205,18 @@ yaks completion fish | source
 # PowerShell
 yaks completion powershell | Out-String | Invoke-Expression
 ```
+
+### Convenience aliases
+
+The PowerShell module (`YaksInit`) exports `ktx` and `kns` as shorthand wrappers:
+
+```powershell
+ktx              # same as: yaks ctx
+ktx my-cluster   # same as: yaks ctx my-cluster
+kns kube-system  # same as: yaks ns kube-system
+```
+
+Tab completion works with these aliases too.
 
 ### Hooks
 
@@ -305,9 +351,10 @@ yaks/
 │   ├── activate.go           # Activate session from current kubeconfig context
 │   ├── ctx.go                # Context switching command
 │   ├── ns.go                 # Namespace switching command
+│   ├── exec.go               # Run command in context without shell
 │   ├── info.go               # Status/info display
 │   ├── list.go               # List contexts/namespaces
-│   ├── init.go               # Shell prompt integration
+│   ├── init.go               # Shell prompt integration & module install
 │   ├── version.go            # Version command
 │   └── completion.go         # Shell completion generation
 ├── pkg/

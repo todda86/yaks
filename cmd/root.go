@@ -14,15 +14,15 @@ var rootCmd = &cobra.Command{
 	Use:   "yaks",
 	Short: "A Kubernetes context & namespace switcher",
 	Long: `yaks (Yet Another Kontext Switcher) is a multiplatform Kubernetes
-context and namespace switcher. It spawns isolated sub-shells with
+context and namespace switcher. It uses in-place eval-based switching with
 per-session kubeconfig files so context changes don't leak between terminals.
 
 Features:
   - Interactive context switching with fzf support
   - Namespace switching within a context
-  - Isolated sub-shells per context/namespace
-  - Shell prompt integration (bash, zsh, fish)
-  - Nested shell support with depth tracking
+  - Isolated per-session kubeconfig files
+  - Shell prompt integration (bash, zsh, fish, PowerShell)
+  - Pre/post/exit hooks with glob matching
   - Multi-kubeconfig file merging`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
