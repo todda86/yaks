@@ -365,7 +365,7 @@ function prompt {
         $ctx = $env:YAKS_CONTEXT
         $ns  = $env:YAKS_NAMESPACE
         if ($ctx) {
-            Write-Host -NoNewline "[$ctx|$ns] " -ForegroundColor Cyan
+            $p = "$([char]27)[1;36m$ctx$([char]27)[0m|$([char]27)[1;33m$ns$([char]27)[0m $p"
         }
     }
     return $p
@@ -459,7 +459,7 @@ function prompt {
         $ctx = $env:YAKS_CONTEXT
         $ns  = $env:YAKS_NAMESPACE
         if ($ctx) {
-            Write-Host -NoNewline "[$ctx|$ns] " -ForegroundColor Cyan
+            $p = "$([char]27)[1;36m$ctx$([char]27)[0m|$([char]27)[1;33m$ns$([char]27)[0m $p"
         }
     }
     return $p
